@@ -18,7 +18,7 @@ The pipeline consists of three modules:
 
 - **`retriever.py`** — Exposes a single public function `retrieve(query, k, config_path)` that internally loads config, initializes the embedding model (`all-MiniLM-L6-v2`), connects to ChromaDB, and returns the top-k most similar code chunks with metadata (repo, path, func_name, source, similarity score).
 - **`generator.py`** — Assembles a grounded context block from the retrieved chunks (formatted as `[N] repo: ..., path: ..., func: ...`) and calls the Llama 3.3 70B model with a strict system prompt instructing it to answer only from the provided context and cite every source as `repo/path::func_name`.
-- **`run_part1.py` / `run_part2.py`** — End-to-end drivers that load and index the corpus, run all queries, and write results tables to Markdown files.
+- **`run_part1.py` / `run_part2.py`** — End-to-end drivers that load and index the corpus, run all queries, and write results tables to Markdown files. Both scripts are idempotent — re-running skips indexing if the collection already contains the expected items.
 
 ---
 

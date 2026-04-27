@@ -28,6 +28,7 @@ Track B - Code RAG
 Part 1: python run_part1.py -> results saved to results_part1.md
 Part 2: python run_part2.py -> results saved to results_part2.md
 Note: UTSA Llama endpoint requires VPN access to the UTSA network.
+Both scripts are idempotent - re-running skips indexing if the collection already contains the expected items.
 
 ## Vector Database
 Fully reproducible by running scripts in order:

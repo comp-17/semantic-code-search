@@ -77,6 +77,11 @@ def index_new_functions(functions, config):
         name=config["starter_collection"],
         metadata={"hnsw:space": "cosine"}
     )
+    # Check if already indexed to avoid duplicate ID errors on re-run
+    existing = collection.get(ids=[f"local_{i}" for i in range(len(functions))])
+    if len(existing["ids"]) == len(functions):
+        print(f"    Local functions already indexed. Skipping.")
+        return
     print(f"\n[2/3] Embedding and inserting {len(functions)} new functions...")
     texts = [f["docstring"] + "\n" + f["source"] for f in functions]
     embeddings = model.encode(texts, show_progress_bar=True).tolist()
