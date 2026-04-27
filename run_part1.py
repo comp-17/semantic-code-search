@@ -1,35 +1,23 @@
 """
 run_part1.py
 ------------
-Part 1: Baseline Starter Corpus Queries — Track B Code RAG
-
-This script:
-  1. Streams the first 1,000 Python functions from CodeSearchNet (HuggingFace).
-  2. Embeds each function (docstring + code) using all-MiniLM-L6-v2.
-  3. Populates a persistent ChromaDB collection named 'csn_python'.
-  4. Runs 10 natural language queries about Python functionality.
-  5. Prints and saves a results table to results_part1.md.
+Part 1: Baseline Starter Corpus Queries - Track B Code RAG
+Streams 1,000 Python functions from CodeSearchNet, indexes them into
+ChromaDB, runs 10 natural language queries, and saves results_part1.md.
 """
-
-import os
 import yaml
 from tqdm import tqdm
 from datasets import load_dataset
 from sentence_transformers import SentenceTransformer
 import chromadb
-
-from retriever import get_collection, retrieve
+from retriever import retrieve
 from generator import get_client, generate
 
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-
-def load_config(path: str = "config.yaml") -> dict:
+def load_config(path="config.yaml"):
     with open(path) as f:
         return yaml.safe_load(f)
 
-
-# ── Part 1 Queries ─────────────────────────────────────────────────────────────
 
 QUERIES = [
     "How do I parse command line arguments in Python?",
@@ -45,137 +33,91 @@ QUERIES = [
 ]
 
 
-# ── Corpus Loading ─────────────────────────────────────────────────────────────
-
-def load_codesearchnet(config: dict) -> list:
-    """Stream the first N Python functions from CodeSearchNet."""
-    print(f"\n[1/3] Loading {config['starter_corpus_size']} functions "
-          f"from CodeSearchNet (Python split)...")
-
-    ds = load_dataset(
-        "code_search_net",
-        "python",
-        split="train",
-        streaming=True,
-        trust_remote_code=True
-    )
-
+def load_codesearchnet(config):
+    print(f"\n[1/3] Loading {config['starter_corpus_size']} functions from CodeSearchNet...")
+    ds = load_dataset("code_search_net", "python", split="train",
+                      streaming=True, trust_remote_code=True)
     items = []
-    for i, row in enumerate(tqdm(ds, total=config["starter_corpus_size"],
-                                  desc="Streaming")):
+    for row in tqdm(ds, total=config["starter_corpus_size"], desc="Streaming"):
         items.append(row)
         if len(items) >= config["starter_corpus_size"]:
             break
-
     print(f"    Loaded {len(items)} functions.")
     return items
 
 
-def index_corpus(items: list, collection, model: SentenceTransformer) -> None:
-    """Embed and insert CodeSearchNet functions into ChromaDB."""
+def index_corpus(items, config):
+    model = SentenceTransformer(config["embedding_model"])
+    client = chromadb.PersistentClient(path=config["vector_db_path"])
+    collection = client.get_or_create_collection(
+        name=config["starter_collection"],
+        metadata={"hnsw:space": "cosine"}
+    )
     print(f"\n[2/3] Embedding and indexing {len(items)} functions...")
-
-    # Check if already indexed
     if collection.count() >= len(items):
-        print(f"    Collection already contains {collection.count()} items. "
-              f"Skipping indexing.")
+        print(f"    Collection already has {collection.count()} items. Skipping.")
         return
-
     BATCH = 100
     for start in tqdm(range(0, len(items), BATCH), desc="Indexing batches"):
         batch = items[start: start + BATCH]
-
-        texts = [
-            (r["func_documentation_string"] or "") + "\n" + r["func_code_string"]
-            for r in batch
-        ]
+        texts = [(r["func_documentation_string"] or "") + "\n" + r["func_code_string"]
+                 for r in batch]
         embeddings = model.encode(texts, show_progress_bar=False).tolist()
-
         collection.add(
             ids=[f"csn_{start + i}" for i in range(len(batch))],
             embeddings=embeddings,
             documents=texts,
-            metadatas=[
-                {
-                    "func_name": r["func_name"],
-                    "repo":      r["repository_name"],
-                    "path":      r["func_path_in_repository"],
-                    "source":    "codesearchnet"
-                }
-                for r in batch
-            ]
+            metadatas=[{
+                "func_name": r["func_name"],
+                "repo":      r["repository_name"],
+                "path":      r["func_path_in_repository"],
+                "source":    "codesearchnet"
+            } for r in batch]
         )
-
     print(f"    Indexed {collection.count()} functions total.")
 
 
-# ── Results Table ──────────────────────────────────────────────────────────────
-
-def format_table_row(qid: int, query: str, chunks: list, answer: str) -> str:
-    """Format a single results table row."""
+def format_table_row(qid, query, chunks, answer):
     top = chunks[0] if chunks else {}
     citation = f"{top.get('repo','?')}/{top.get('path','?')}::{top.get('func_name','?')}"
-    score    = top.get("score", 0.0)
-
-    # First two sentences of answer
+    score = top.get("score", 0.0)
     sentences = answer.replace("\n", " ").split(". ")
     short_answer = ". ".join(sentences[:2]).strip()
     if not short_answer.endswith("."):
         short_answer += "."
-
-    # Simple grounding check: does the answer cite at least one func_name?
     cited = any(c["func_name"] in answer for c in chunks)
     grounded = "Yes" if cited else "No"
-
-    return (
-        f"| Q{qid:02d} "
-        f"| {query} "
-        f"| `{citation}` "
-        f"| {score:.4f} "
-        f"| {short_answer} "
-        f"| {grounded} |"
-    )
+    return f"| Q{qid:02d} | {query} | {citation} | {score:.4f} | {short_answer} | {grounded} |"
 
 
-def print_and_save_table(rows: list, output_path: str = "results_part1.md") -> None:
+def print_and_save_table(rows, output_path="results_part1.md"):
     header = (
-        "## Part 1 — Baseline Query Results (Starter Corpus)\n\n"
-        "| Q-ID | Query | Top Retrieved (`repo/path::func_name`) "
+        "## Part 1 - Baseline Query Results (Starter Corpus)\n\n"
+        "| Q-ID | Query | Top Retrieved (repo/path::func_name) "
         "| Sim. Score | Generated Answer (first 2 sentences) | Grounded? |\n"
         "|---|---|---|---|---|---|"
     )
     table = header + "\n" + "\n".join(rows)
-
     print("\n" + table)
     with open(output_path, "w") as f:
         f.write(table + "\n")
     print(f"\n[Saved to {output_path}]")
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
-
 def main():
-    config     = load_config()
-    model      = SentenceTransformer(config["embedding_model"])
-    collection = get_collection(config)
-    client     = get_client(config)
-
-    # Step 1 & 2: Load and index corpus
+    config = load_config()
+    client = get_client(config)
     items = load_codesearchnet(config)
-    index_corpus(items, collection, model)
-
-    # Step 3: Run queries
+    index_corpus(items, config)
     print(f"\n[3/3] Running {len(QUERIES)} queries...\n")
     rows = []
     for qid, query in enumerate(QUERIES, start=1):
         print(f"  Q{qid:02d}: {query}")
-        chunks = retrieve(query, collection, model, k=config["top_k"])
+        chunks = retrieve(query, k=config["top_k"])
         answer = generate(query, chunks, client, config)
-        row    = format_table_row(qid, query, chunks, answer)
+        row = format_table_row(qid, query, chunks, answer)
         rows.append(row)
-        print(f"       → {chunks[0]['repo']}/{chunks[0]['path']}::{chunks[0]['func_name']}"
-              f"  score={chunks[0]['score']}")
-
+        print(f"       -> {chunks[0]['repo']}/{chunks[0]['path']}::{chunks[0]['func_name']}  score={chunks[0]['score']}")
     print_and_save_table(rows)
 
 
