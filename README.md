@@ -18,6 +18,12 @@ Track B - Code RAG
     conda activate llm
     pip install -r requirements.txt
 
+## Modules
+- retriever.py: Single public function retrieve(query, k, config_path) - embeds query and returns top-k chunks
+- generator.py: Assembles grounded prompt and calls the LLM with citations
+- run_part1.py: Indexes starter corpus and runs 10 baseline queries
+- run_part2.py: Adds new functions and runs 5 targeted + 5 cross-corpus queries
+
 ## Reproducing Results
 Part 1: python run_part1.py -> results saved to results_part1.md
 Part 2: python run_part2.py -> results saved to results_part2.md
