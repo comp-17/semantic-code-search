@@ -1,0 +1,10 @@
+embedding_model: sentence-transformers/all-MiniLM-L6-v2
+generator_model: llama-3.3-70b-instruct-awq
+utsa_base_url: http://10.246.100.230/v1
+utsa_api_key: gpustack_50e00c9281422bc5_0c0696dfcb1696d7635e58a2e56d6282
+top_k: 4
+distance_metric: cosine
+vector_db_path: ./data/chroma_code
+starter_collection: csn_python
+starter_corpus_size: 1000
+new_funcs_dir: ./data/new_funcs

@@ -1,0 +1,9 @@
+datasets
+chromadb
+sentence-transformers
+openai
+pyyaml
+tqdm
+requests
+numpy
+accelerate
